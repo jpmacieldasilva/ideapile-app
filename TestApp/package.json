@@ -1,0 +1,31 @@
+{
+  "name": "testapp",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web"
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "^2.2.0",
+    "@react-native-voice/voice": "^3.2.4",
+    "expo": "~53.0.22",
+    "expo-router": "^5.1.4",
+    "expo-speech": "^13.1.7",
+    "expo-sqlite": "^15.2.14",
+    "expo-status-bar": "~2.2.3",
+    "nativewind": "^4.1.23",
+    "openai": "^5.16.0",
+    "react": "19.0.0",
+    "react-native": "0.79.6",
+    "react-native-uuid": "^2.0.3"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.25.2",
+    "@types/react": "~19.0.10",
+    "typescript": "~5.8.3"
+  },
+  "private": true
+}

@@ -1,0 +1,63 @@
+# PRD - Redesign Interface IdeaPile
+
+## Visão Geral
+Implementar um redesign completo da interface do IdeaPile para criar uma experiência visual similar ao projeto Pile (referência fornecida), com foco em timeline vertical, tema escuro elegante e interação centrada na captura por voz.
+
+## Objetivos do Redesign
+
+### Interface Principal (Home)
+- Timeline vertical estilo calendário/diário para visualizar ideias ao longo do tempo
+- Tema escuro elegante com paleta de cores da referência
+- Cards de ideias organizados cronologicamente
+- Um único FAB para captura por voz como ação principal
+- Tipografia limpa e hierárquica
+- Timestamps visuais ("há 3 dias", "há 2 dias", etc.)
+
+### Tela de Captura por Voz
+- Interface fullscreen para captura por voz (similar à referência)
+- Transcrição em tempo real do texto sendo capturado
+- Indicador visual "Listening..." 
+- Waveform visual durante a gravação
+- Opção secundária "Escrever ideia" que abre campo de texto
+- Controles integrados (pausar, cancelar, salvar)
+
+### Sistema de Cards
+- Cards inspirados na referência visual fornecida
+- Organização temporal na timeline
+- Clique nos cards leva aos detalhes
+- Botões de IA (expandir, combinar) nos detalhes dos cards
+- Estados visuais para diferentes tipos de conteúdo
+
+### Especificações Técnicas
+- Manter React Native + Expo existente
+- Utilizar NativeWind para styling
+- Preservar funcionalidades existentes de IA
+- Manter sistema de armazenamento SQLite
+- Integrar com speech-to-text já implementado
+
+### Fluxo de Navegação
+1. Home: Timeline + FAB de voz
+2. Captura: Tela speech com opção texto
+3. Detalhes: Card expandido com botões IA
+
+## Requisitos de Design
+- Tema escuro como padrão
+- Paleta de cores neutra com acentos
+- Espaçamento generoso e arejado
+- Animações suaves entre transições
+- Typography hierarchy bem definida
+- Interface responsiva e acessível
+
+## Funcionalidades Existentes a Preservar
+- Sistema de ideias com SQLite
+- Integração OpenAI para IA
+- Speech-to-text com fallback
+- Funcionalidades de expandir, combinar, sugerir ideias
+- Sistema de configurações
+
+## Prioridades de Implementação
+1. Tema escuro e sistema de cores
+2. Layout timeline na home
+3. Interface de speech redesenhada
+4. Cards de ideias com visual da referência
+5. Micro-interações e polish final
