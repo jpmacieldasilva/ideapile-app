@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { View, Text, ScrollView, TouchableOpacity } from 'react-native'
 import { router } from 'expo-router'
 import { Idea } from '../src/types'
@@ -11,10 +11,29 @@ import { useUserSettings } from '../src/hooks/useUserSettings'
 export default function HomeScreen() {
   const { ideas, addIdea, updateIdea, deleteIdea, loading, error } = useIdeas()
   const colors = useThemeColors()
-  const { settings: userSettings } = useUserSettings()
+  const { settings: userSettings, refreshSettings } = useUserSettings()
+  
+  // Estado para filtro de tags
+  const [selectedTag, setSelectedTag] = useState<string | null>(null)
+  
+  // Recarregar configurações do usuário quando a tela for montada
+  useEffect(() => {
+    refreshSettings();
+  }, [refreshSettings]);
+  
+  // Extrair tags únicas de todas as ideias
+  const tags = useMemo(() => {
+    const allTags = ideas.flatMap(idea => idea.tags || [])
+    return [...new Set(allTags)].sort()
+  }, [ideas])
+  
+  // Filtrar ideias por tag selecionada
+  const filteredIdeas = useMemo(() => {
+    if (!selectedTag) return ideas
+    return ideas.filter(idea => idea.tags && idea.tags.includes(selectedTag))
+  }, [ideas, selectedTag])
 
-  // Debug: log dos dados
-  console.log('HomeScreen render:', { ideas: ideas.length, loading, error })
+
 
   const handleNavigateToDetails = (id: string) => {
     router.push(`/idea/${id}`)
@@ -127,7 +146,7 @@ export default function HomeScreen() {
               fontSize: 13, 
               color: colors.mutedForeground 
             }}>
-              {ideas.length} ideia{ideas.length !== 1 ? 's' : ''}
+              {filteredIdeas.length} ideia{filteredIdeas.length !== 1 ? 's' : ''}
             </Text>
           </View>
 
@@ -153,14 +172,17 @@ export default function HomeScreen() {
           alignItems: 'center', 
           gap: 8
         }}>
-          <TouchableOpacity style={{
-            paddingHorizontal: 16,
-            paddingVertical: 6,
-            backgroundColor: colors.muted,
-            borderRadius: 16,
-            borderWidth: 1,
-            borderColor: colors.border
-          }}>
+          <TouchableOpacity
+            style={{
+              paddingHorizontal: 16,
+              paddingVertical: 6,
+              backgroundColor: selectedTag === null ? colors.muted : 'transparent',
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: colors.border
+            }}
+            onPress={() => setSelectedTag(null)}
+          >
             <Text style={{ 
               fontSize: 13, 
               fontWeight: '500', 
@@ -169,34 +191,28 @@ export default function HomeScreen() {
               Todas as categorias
             </Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity style={{
-            paddingHorizontal: 16,
-            paddingVertical: 6,
-            backgroundColor: 'transparent',
-            borderRadius: 16
-          }}>
-            <Text style={{ 
-              fontSize: 13, 
-              color: colors.foreground 
-            }}>
-              Trabalho Inteligente
-            </Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={{
-            paddingHorizontal: 16,
-            paddingVertical: 6,
-            backgroundColor: 'transparent',
-            borderRadius: 16
-          }}>
-            <Text style={{ 
-              fontSize: 13, 
-              color: colors.foreground 
-            }}>
-              Criativo
-            </Text>
-          </TouchableOpacity>
+          {tags.map((tag) => (
+            <TouchableOpacity
+              key={tag}
+              style={{
+                paddingHorizontal: 16,
+                paddingVertical: 6,
+                backgroundColor: selectedTag === tag ? colors.muted : 'transparent',
+                borderRadius: 16,
+                borderWidth: 1,
+                borderColor: colors.border
+              }}
+              onPress={() => setSelectedTag(tag)}
+            >
+              <Text style={{ 
+                fontSize: 13, 
+                color: colors.foreground,
+                fontWeight: selectedTag === tag ? '500' : '400'
+              }}>
+                {tag}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
       </View>
 
@@ -224,7 +240,7 @@ export default function HomeScreen() {
               {error}
             </Text>
           </View>
-        ) : ideas.length === 0 ? (
+        ) : filteredIdeas.length === 0 ? (
           <View style={{ 
             flex: 1, 
             alignItems: 'center', 
@@ -262,7 +278,7 @@ export default function HomeScreen() {
           </View>
         ) : (
           <View style={{ gap: 24 }}>
-            {groupIdeasByDate(ideas).map(({ date, ideas: ideasInGroup }, groupIndex) => (
+            {groupIdeasByDate(filteredIdeas).map(({ date, ideas: ideasInGroup }, groupIndex) => (
               <View key={date.toISOString()} style={{ gap: 16 }}>
                 {/* Header da data */}
                 <View style={{ 
@@ -292,7 +308,7 @@ export default function HomeScreen() {
                   {/* Linha contínua da timeline */}
                   <View style={{ 
                     position: 'absolute',
-                    left: 20,
+                    left: 8,
                     top: 0,
                     bottom: 0,
                     width: 2, 
@@ -308,7 +324,7 @@ export default function HomeScreen() {
                     }}>
                       
                       {/* Card da ideia */}
-                      <View style={{ flex: 1, marginLeft: 16 }}>
+                      <View style={{ flex: 1, marginLeft: 4 }}>
                         <TouchableOpacity
                           onPress={() => handleNavigateToDetails(idea.id)}
                           activeOpacity={0.7}

@@ -282,6 +282,69 @@ Responda apenas com os números das ideias conectadas, separados por vírgula (e
     }
   }
 
+  // Gerar tags automaticamente baseadas no conteúdo
+  async generateTags(content: string): Promise<string[]> {
+    await this.initOpenAI();
+
+    try {
+      const promptText = `
+Analise o seguinte conteúdo e sugira exatamente 3 tags relevantes que representem os principais temas, conceitos ou categorias.
+
+Conteúdo: "${content}"
+
+Regras:
+- Responda apenas com 3 tags separadas por vírgula
+- Use palavras-chave simples e diretas
+- Evite tags muito genéricas como "ideia", "projeto", "tecnologia"
+- Foque em conceitos específicos mencionados no conteúdo
+- Não use numeração, aspas ou formatação adicional
+
+Exemplo de resposta: inovação, automação, produtividade
+      `.trim();
+
+      const response: any = await this.openai!.chat.completions.create({
+        model: AI_CONFIG.model,
+        messages: [{ role: 'user', content: promptText }],
+        max_tokens: 50,
+        temperature: 0.3, // Menor temperatura para respostas mais consistentes
+      });
+
+      const responseContent = response.choices[0]?.message?.content?.trim();
+      if (!responseContent) {
+        throw new Error('Resposta vazia da IA');
+      }
+
+      // Extrair tags da resposta
+      const tags = responseContent
+        .split(',')
+        .map((tag: string) => tag.trim().toLowerCase())
+        .filter((tag: string) => tag.length > 0 && tag.length <= 20) // Filtrar tags válidas
+        .slice(0, 3); // Garantir máximo de 3 tags
+
+      console.log('🏷️ Tags generated successfully:', tags);
+      return tags;
+    } catch (error) {
+      console.error('❌ Error generating tags:', error);
+      // Fallback: retornar tags básicas baseadas em palavras-chave
+      return this.generateFallbackTags(content);
+    }
+  }
+
+  // Gerar tags de fallback quando a IA falha
+  private generateFallbackTags(content: string): string[] {
+    const commonTags = [
+      'ideia', 'projeto', 'tecnologia', 'inovação', 'produtividade',
+      'design', 'desenvolvimento', 'negócio', 'criatividade', 'organização'
+    ];
+
+    const words = content.toLowerCase().split(/\s+/);
+    const relevantTags = commonTags.filter(tag => 
+      words.some(word => word.includes(tag) || tag.includes(word))
+    );
+
+    return relevantTags.slice(0, 3);
+  }
+
   // Testar conexão com OpenAI
   async testConnection(): Promise<boolean> {
     try {

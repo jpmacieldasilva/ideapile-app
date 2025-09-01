@@ -22,8 +22,9 @@ export interface AppSettings {
   openaiApiKey?: string;
   openaiModel: 'gpt-3.5-turbo' | 'gpt-4';
   aiTemperature: number;
-  theme: 'light' | 'dark';
+  theme: 'light' | 'dark' | 'system';
   enableSpeechToText: boolean;
+  enableAutoTagging: boolean; // Nova configuração para geração automática de tags
 }
 
 export interface IdeaCardProps {

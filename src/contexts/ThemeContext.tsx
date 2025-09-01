@@ -118,7 +118,7 @@ const DarkColors = {
   headerBorder: '#1e1e1e',
 } as const;
 
-export type Colors = typeof DarkColors;
+export type Colors = typeof DarkColors | typeof LightColors;
 
 interface ThemeContextType {
   theme: 'light' | 'dark';
@@ -151,8 +151,9 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
     const loadTheme = async () => {
       try {
         const settings = await storage.getSettings();
-        setThemeState(settings.theme);
-        setColors(settings.theme === 'light' ? LightColors : DarkColors);
+        const themeToSet = settings.theme === 'system' ? 'dark' : settings.theme;
+        setThemeState(themeToSet);
+        setColors(themeToSet === 'light' ? LightColors : DarkColors);
       } catch (error) {
         console.error('Error loading theme:', error);
         // Manter tema padrão (dark)

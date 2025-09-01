@@ -19,7 +19,7 @@ export function useUserSettings() {
   const loadUserSettings = async () => {
     try {
       const savedUserName = await storage.getUserName();
-      const savedUserEmail = await storage.getItem('userEmail');
+      const savedUserEmail = await storage.getUserEmail();
       
       setSettings({
         userName: savedUserName || DEFAULT_USER_SETTINGS.userName,
@@ -46,12 +46,18 @@ export function useUserSettings() {
   // Salvar email do usuário
   const saveUserEmail = async (userEmail: string) => {
     try {
-      await storage.setItem('userEmail', userEmail);
+      await storage.saveUserEmail(userEmail);
       setSettings(prev => ({ ...prev, userEmail }));
     } catch (error) {
       console.error('Error saving user email:', error);
       throw error;
     }
+  };
+
+  // Recarregar configurações (útil para sincronizar após mudanças)
+  const refreshSettings = async () => {
+    setLoading(true);
+    await loadUserSettings();
   };
 
   useEffect(() => {
@@ -64,5 +70,6 @@ export function useUserSettings() {
     saveUserName,
     saveUserEmail,
     loadUserSettings,
+    refreshSettings,
   };
 }

@@ -163,7 +163,7 @@ export default function IdeaDetailScreen() {
   };
 
   const handleEdit = () => {
-    Alert.alert('Editar', 'Funcionalidade de edição em breve!');
+    router.push(`/idea/edit/${id}`);
   };
 
   const handleDelete = async () => {

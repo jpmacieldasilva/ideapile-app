@@ -8,13 +8,14 @@ import {
   StyleSheet,
   ScrollView,
   Linking,
-  Switch,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
-import { storage, aiService } from '../src/services';
-import { AppSettings } from '../src/types';
-import { Colors, TextStyles, Spacing, BorderRadius } from '../src/constants';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
+import { storage, aiService, ideaPileService } from '../src/services';
+import { AppSettings, Idea, AIExpansion } from '../src/types';
+import { Colors } from '../src/constants';
 import { Icon, AppIcons } from '../src/components/ui';
 import { useTheme } from '../src/contexts/ThemeContext';
 
@@ -25,12 +26,13 @@ export default function SettingsScreen() {
     aiTemperature: 0.7,
     theme: theme || 'dark',
     enableSpeechToText: true,
+    enableAutoTagging: true,
   });
   const [apiKey, setApiKey] = useState('');
+  const [showApiKey, setShowApiKey] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [userName, setUserName] = useState('');
+  const [userName, setUserName] = useState('Skylar');
+  const [userEmail, setUserEmail] = useState('');
 
   useEffect(() => {
     loadSettings();
@@ -51,6 +53,11 @@ export default function SettingsScreen() {
       if (savedUserName) {
         setUserName(savedUserName);
       }
+
+      const savedUserEmail = await storage.getUserEmail();
+      if (savedUserEmail) {
+        setUserEmail(savedUserEmail);
+      }
     } catch (error) {
       console.error('Error loading settings:', error);
       Alert.alert('Erro', 'Não foi possível carregar as configurações');
@@ -60,7 +67,6 @@ export default function SettingsScreen() {
   };
 
   const handleSaveSettings = async () => {
-    setSaving(true);
     try {
       await storage.saveSettings(settings);
       
@@ -72,52 +78,34 @@ export default function SettingsScreen() {
       if (userName) {
         await storage.saveUserName(userName);
       }
+
+      if (userEmail) {
+        await storage.saveUserEmail(userEmail);
+      }
       
-      Alert.alert('Sucesso', 'Configurações salvas!');
+      Alert.alert('Sucesso', 'Configurações salvas!', [
+        { 
+          text: 'OK', 
+          onPress: () => {
+            // Navegar de volta para a home para refletir as mudanças
+            router.back();
+          }
+        }
+      ]);
     } catch (error) {
       console.error('Error saving settings:', error);
       Alert.alert('Erro', 'Não foi possível salvar as configurações');
-    } finally {
-      setSaving(false);
     }
   };
 
-  const handleTestAPI = async () => {
-    if (!apiKey || apiKey.includes('*')) {
-      Alert.alert('Erro', 'Digite uma chave da OpenAI válida');
-      return;
-    }
-
-    setTesting(true);
-    try {
-      // Salvar temporariamente para testar
-      await storage.saveOpenAIKey(apiKey);
-      
-      const isWorking = await aiService.testConnection();
-      
-      if (isWorking) {
-        Alert.alert('Sucesso!', 'Conexão com OpenAI funcionando!');
-      } else {
-        Alert.alert('Erro', 'Não foi possível conectar com a OpenAI. Verifique sua chave.');
-      }
-    } catch (error) {
-      console.error('Error testing API:', error);
-      Alert.alert('Erro', 'Falha ao testar a conexão. Verifique sua internet e a chave da API.');
-    } finally {
-      setTesting(false);
-    }
-  };
-
-  const openOpenAIHelp = () => {
-    Linking.openURL('https://platform.openai.com/api-keys');
-  };
-
-  const handleThemeChange = async (newTheme: 'light' | 'dark') => {
-    const newSettings = { ...settings, theme: newTheme };
+  const handleThemeChange = async (newTheme: 'light' | 'dark' | 'system') => {
+    const newSettings = { ...settings, theme: newTheme as 'light' | 'dark' };
     setSettings(newSettings);
     
     // Atualizar o contexto de tema imediatamente
-    setTheme(newTheme);
+    if (newTheme !== 'system') {
+      setTheme(newTheme as 'light' | 'dark');
+    }
     
     // Salvar automaticamente a mudança de tema
     try {
@@ -128,30 +116,152 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleSpeechToggle = async (enabled: boolean) => {
-    const newSettings = { ...settings, enableSpeechToText: enabled };
-    setSettings(newSettings);
-    
-    // Salvar automaticamente a mudança de speech
+  const handleExport = async (format: 'json' | 'csv' | 'txt') => {
     try {
-      await storage.saveSettings(newSettings);
+      // Buscar todos os dados
+      const allData = await storage.exportData() as any;
+      const ideas = await ideaPileService.getAllIdeas();
+      
+      let exportContent = '';
+      let fileName = `ideapile-export-${new Date().toISOString().split('T')[0]}`;
+      let mimeType = '';
+      
+      switch (format) {
+        case 'json':
+          const jsonData = {
+            exportDate: new Date().toISOString(),
+            version: '1.0.0',
+            user: {
+              name: allData.data['@ideapile:user_name'] || 'Unknown',
+              email: allData.data['@ideapile:user_email'] || '',
+            },
+            settings: allData.data['@ideapile:app_settings'] || {},
+            ideas: ideas.map((idea: Idea) => ({
+              id: idea.id,
+              content: idea.content,
+              timestamp: idea.timestamp.toISOString(),
+              tags: idea.tags,
+              isFavorite: idea.isFavorite,
+              connections: idea.connections || [],
+              aiExpansions: idea.aiExpansions || [],
+            })),
+            totalIdeas: ideas.length,
+          };
+          exportContent = JSON.stringify(jsonData, null, 2);
+          fileName += '.json';
+          mimeType = 'application/json';
+          break;
+          
+        case 'csv':
+          // Cabeçalho CSV
+          exportContent = 'ID,Content,Timestamp,Tags,IsFavorite,Connections,AIExpansions\n';
+          
+          // Dados das ideias
+          ideas.forEach((idea: Idea) => {
+            const content = `"${idea.content.replace(/"/g, '""')}"`;
+            const timestamp = idea.timestamp.toISOString();
+            const tags = `"${idea.tags.join('; ')}"`;
+            const isFavorite = idea.isFavorite ? 'true' : 'false';
+            const connections = `"${(idea.connections || []).join('; ')}"`;
+            const aiExpansions = `"${(idea.aiExpansions || []).map((exp: AIExpansion) => exp.type).join('; ')}"`;
+            
+            exportContent += `${idea.id},${content},${timestamp},${tags},${isFavorite},${connections},${aiExpansions}\n`;
+          });
+          fileName += '.csv';
+          mimeType = 'text/csv';
+          break;
+          
+        case 'txt':
+          // Formato de texto legível
+          exportContent = `IdeaPile Export\n`;
+          exportContent += `Generated: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}\n`;
+          exportContent += `User: ${allData.data['@ideapile:user_name'] || 'Unknown'}\n`;
+          exportContent += `Total Ideas: ${ideas.length}\n`;
+          exportContent += `\n${'='.repeat(50)}\n\n`;
+          
+          ideas.forEach((idea: Idea, index: number) => {
+            exportContent += `IDEA ${index + 1}\n`;
+            exportContent += `ID: ${idea.id}\n`;
+            exportContent += `Content: ${idea.content}\n`;
+            exportContent += `Created: ${idea.timestamp.toLocaleDateString()} ${idea.timestamp.toLocaleTimeString()}\n`;
+            exportContent += `Tags: ${idea.tags.join(', ')}\n`;
+            exportContent += `Favorite: ${idea.isFavorite ? 'Yes' : 'No'}\n`;
+            
+            if (idea.connections && idea.connections.length > 0) {
+              exportContent += `Connections: ${idea.connections.join(', ')}\n`;
+            }
+            
+            if (idea.aiExpansions && idea.aiExpansions.length > 0) {
+              exportContent += `AI Expansions:\n`;
+              idea.aiExpansions.forEach((exp: AIExpansion) => {
+                exportContent += `  - ${exp.type}: ${exp.content.substring(0, 100)}...\n`;
+              });
+            }
+            
+            exportContent += `\n${'-'.repeat(30)}\n\n`;
+          });
+          fileName += '.txt';
+          mimeType = 'text/plain';
+          break;
+      }
+      
+      // Salvar arquivo temporário
+      const fileUri = `${FileSystem.documentDirectory}${fileName}`;
+      await FileSystem.writeAsStringAsync(fileUri, exportContent, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+      
+      // Verificar se o compartilhamento está disponível
+      const isAvailable = await Sharing.isAvailableAsync();
+      
+      if (isAvailable) {
+        // Compartilhar arquivo
+        await Sharing.shareAsync(fileUri, {
+          mimeType,
+          dialogTitle: `Export IdeaPile Data as ${format.toUpperCase()}`,
+          UTI: format === 'json' ? 'public.json' : format === 'csv' ? 'public.comma-separated-values-text' : 'public.plain-text',
+        });
+        
+        Alert.alert(
+          'Export Successful', 
+          `Your data has been exported as ${format.toUpperCase()} and is ready to share!`,
+          [{ text: 'OK', style: 'default' }]
+        );
+      } else {
+        // Fallback: mostrar conteúdo em alert
+        Alert.alert(
+          'Export Ready', 
+          `Data exported as ${format.toUpperCase()}\n\nFile saved to: ${fileUri}\n\nFirst 500 characters:\n${exportContent.substring(0, 500)}...`,
+          [
+            { text: 'OK', style: 'default' },
+            { 
+              text: 'Copy to Clipboard', 
+              onPress: () => {
+                // Aqui você pode implementar a cópia para clipboard se necessário
+                console.log('Copy to clipboard:', exportContent);
+              }
+            }
+          ]
+        );
+      }
+      
+      console.log(`✅ Export completed: ${fileName}`);
     } catch (error) {
-      console.error('Error saving speech setting:', error);
-      Alert.alert('Erro', 'Não foi possível salvar a configuração de fala');
+      console.error('❌ Error exporting data:', error);
+      Alert.alert('Export Error', 'Failed to export data. Please try again.');
     }
   };
 
   // Aguardar tanto o loading das configurações quanto do tema
   if (loading || isLoading) {
-    // Usar estilos estáticos durante o loading
     const loadingStyles = createStyles(Colors);
     return (
       <View style={loadingStyles.container}>
         <View style={loadingStyles.header}>
           <TouchableOpacity onPress={() => router.back()} style={loadingStyles.backButton}>
-            <Text style={loadingStyles.backText}>← Voltar</Text>
+            <Icon name="arrow-back" library="Material" size={24} color={colors.primary} />
           </TouchableOpacity>
-          <Text style={loadingStyles.title}>Configurações</Text>
+          <Text style={loadingStyles.title}>Settings</Text>
           <View style={loadingStyles.placeholder} />
         </View>
         <View style={loadingStyles.loadingContainer}>
@@ -170,214 +280,195 @@ export default function SettingsScreen() {
       {/* Header */}
       <View style={dynamicStyles.header}>
         <TouchableOpacity onPress={() => router.back()} style={dynamicStyles.backButton}>
-          <Text style={dynamicStyles.backText}>← Voltar</Text>
+          <Icon name="arrow-back" library="Material" size={24} color={colors.foreground} />
         </TouchableOpacity>
-        <Text style={dynamicStyles.title}>Configurações</Text>
+        <Text style={dynamicStyles.title}>Settings</Text>
         <TouchableOpacity 
           onPress={handleSaveSettings} 
-          style={[dynamicStyles.saveButton, saving && dynamicStyles.saveButtonDisabled]}
-          disabled={saving}
+          style={dynamicStyles.saveButton}
         >
-          <Text style={[dynamicStyles.saveText, saving && dynamicStyles.saveTextDisabled]}>
-            {saving ? 'Salvando...' : 'Salvar'}
-          </Text>
+          <Text style={dynamicStyles.saveText}>Save</Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView style={dynamicStyles.content} showsVerticalScrollIndicator={false}>
-        {/* Seção do Usuário */}
+        {/* PROFILE Section */}
         <View style={dynamicStyles.section}>
           <View style={dynamicStyles.sectionHeader}>
-            <Icon name="person" library="Material" size={18} color={colors.foreground} />
-            <Text style={dynamicStyles.sectionTitle}>Perfil do Usuário</Text>
+            <Icon name="person" library="Material" size={20} color={colors.foreground} />
+            <Text style={dynamicStyles.sectionTitle}>PROFILE</Text>
           </View>
           
-          <View style={dynamicStyles.inputContainer}>
-            <Text style={dynamicStyles.label}>Seu Nome</Text>
-            <TextInput
-              style={dynamicStyles.input}
-              placeholder="Digite seu nome"
-              value={userName}
-              onChangeText={setUserName}
-              autoCapitalize="words"
-              autoCorrect={false}
-            />
-            <Text style={dynamicStyles.helpText}>
-              Este nome aparecerá na saudação da tela inicial
-            </Text>
+          <View style={dynamicStyles.card}>
+            <View style={dynamicStyles.inputContainer}>
+              <Text style={dynamicStyles.label}>Name</Text>
+              <TextInput
+                style={dynamicStyles.input}
+                placeholder="Enter your name"
+                value={userName}
+                onChangeText={setUserName}
+                autoCapitalize="words"
+                autoCorrect={false}
+              />
+            </View>
+            
+            <View style={dynamicStyles.inputContainer}>
+              <Text style={dynamicStyles.label}>Email</Text>
+              <TextInput
+                style={dynamicStyles.input}
+                placeholder="Enter your email"
+                value={userEmail}
+                onChangeText={setUserEmail}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="email-address"
+              />
+            </View>
           </View>
         </View>
 
-        {/* Seção OpenAI */}
+        {/* AI CONFIGURATION Section */}
         <View style={dynamicStyles.section}>
           <View style={dynamicStyles.sectionHeader}>
-            <Icon name="smart-toy" library="Material" size={18} color={colors.foreground} />
-            <Text style={dynamicStyles.sectionTitle}>Inteligência Artificial</Text>
+            <Icon name="build" library="Material" size={20} color={colors.foreground} />
+            <Text style={dynamicStyles.sectionTitle}>AI CONFIGURATION</Text>
           </View>
           
-          <View style={dynamicStyles.inputContainer}>
-            <Text style={dynamicStyles.label}>Chave da API OpenAI</Text>
-            <TextInput
-              style={dynamicStyles.input}
-              placeholder="sk-..."
-              value={apiKey}
-              onChangeText={setApiKey}
-              secureTextEntry={apiKey.includes('*')}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            <TouchableOpacity onPress={openOpenAIHelp} style={dynamicStyles.helpButton}>
-              <Text style={dynamicStyles.helpText}>Como obter sua chave da API?</Text>
-            </TouchableOpacity>
-          </View>
-
-          <TouchableOpacity 
-            onPress={handleTestAPI} 
-            style={[dynamicStyles.testButton, testing && dynamicStyles.testButtonDisabled]}
-            disabled={testing}
-          >
-            <View style={dynamicStyles.testButtonContent}>
-              {testing ? (
-                <>
-                  <Icon {...AppIcons.loading} size={16} color={colors.primaryForeground} />
-                  <Text style={dynamicStyles.testButtonText}>Testando...</Text>
-                </>
-              ) : (
-                <>
-                  <Icon {...AppIcons.test} size={16} color={colors.primaryForeground} />
-                  <Text style={dynamicStyles.testButtonText}>Testar Conexão</Text>
-                </>
-              )}
-            </View>
-          </TouchableOpacity>
-
-          <View style={dynamicStyles.inputContainer}>
-            <Text style={dynamicStyles.label}>Modelo da IA</Text>
-            <View style={dynamicStyles.modelContainer}>
-              <TouchableOpacity
-                style={[
-                  dynamicStyles.modelOption,
-                  settings.openaiModel === 'gpt-3.5-turbo' && dynamicStyles.modelOptionSelected
-                ]}
-                onPress={() => setSettings({ ...settings, openaiModel: 'gpt-3.5-turbo' })}
-              >
-                <Text style={[
-                  dynamicStyles.modelText,
-                  settings.openaiModel === 'gpt-3.5-turbo' && dynamicStyles.modelTextSelected
-                ]}>
-                  GPT-3.5 Turbo (Mais rápido)
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  dynamicStyles.modelOption,
-                  settings.openaiModel === 'gpt-4' && dynamicStyles.modelOptionSelected
-                ]}
-                onPress={() => setSettings({ ...settings, openaiModel: 'gpt-4' })}
-              >
-                <Text style={[
-                  dynamicStyles.modelText,
-                  settings.openaiModel === 'gpt-4' && dynamicStyles.modelTextSelected
-                ]}>
-                  GPT-4 (Mais inteligente)
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          <View style={dynamicStyles.inputContainer}>
-            <Text style={dynamicStyles.label}>
-              Criatividade da IA: {Math.round(settings.aiTemperature * 100)}%
-            </Text>
-            <View style={dynamicStyles.sliderContainer}>
-              <Text style={dynamicStyles.sliderLabel}>Conservadora</Text>
-              <View style={dynamicStyles.sliderTrack}>
-                <TouchableOpacity
-                  style={[
-                    dynamicStyles.sliderThumb,
-                    { left: `${settings.aiTemperature * 90}%` }
-                  ]}
-                  onPressIn={() => {
-                    // Implementação simples do slider
-                  }}
+          <View style={dynamicStyles.card}>
+            <View style={dynamicStyles.inputContainer}>
+              <Text style={dynamicStyles.label}>OpenAI API Key</Text>
+              <View style={dynamicStyles.passwordContainer}>
+                <TextInput
+                  style={dynamicStyles.passwordInput}
+                  placeholder="sk-..."
+                  value={apiKey}
+                  onChangeText={setApiKey}
+                  secureTextEntry={!showApiKey}
+                  autoCapitalize="none"
+                  autoCorrect={false}
                 />
+                <TouchableOpacity 
+                  onPress={() => setShowApiKey(!showApiKey)}
+                  style={dynamicStyles.eyeButton}
+                >
+                  <Icon 
+                    name={showApiKey ? "visibility-off" : "visibility"} 
+                    library="Material" 
+                    size={20} 
+                    color={colors.mutedForeground} 
+                  />
+                </TouchableOpacity>
               </View>
-              <Text style={dynamicStyles.sliderLabel}>Criativa</Text>
+              <Text style={dynamicStyles.helpText}>
+                Required for AI features like idea expansion and connections
+              </Text>
             </View>
-            <Text style={dynamicStyles.hint}>
-              Maior criatividade pode gerar respostas mais inovadoras, mas menos precisas
-            </Text>
+
+            {/* Auto Tagging Toggle */}
+            <View style={dynamicStyles.inputContainer}>
+              <View style={dynamicStyles.toggleRow}>
+                <View style={dynamicStyles.toggleTextContainer}>
+                  <Text style={dynamicStyles.label}>Geração Automática de Tags</Text>
+                  <Text style={dynamicStyles.helpText}>
+                    Gerar automaticamente 3 tags relevantes ao salvar ideias
+                  </Text>
+                </View>
+                <TouchableOpacity 
+                  onPress={() => setSettings({...settings, enableAutoTagging: !settings.enableAutoTagging})}
+                  style={[
+                    dynamicStyles.toggleSwitch,
+                    { backgroundColor: settings.enableAutoTagging ? colors.primary : colors.border }
+                  ]}
+                >
+                  <View style={[
+                    dynamicStyles.toggleThumb,
+                    { 
+                      transform: [{ translateX: settings.enableAutoTagging ? 20 : 0 }],
+                      backgroundColor: colors.background
+                    }
+                  ]} />
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
         </View>
 
-        {/* Seção Geral */}
+        {/* APPEARANCE Section */}
         <View style={dynamicStyles.section}>
           <View style={dynamicStyles.sectionHeader}>
-            <Icon {...AppIcons.settings} size={18} color={colors.foreground} />
-            <Text style={dynamicStyles.sectionTitle}>Geral</Text>
+            <Icon name="palette" library="Material" size={20} color={colors.foreground} />
+            <Text style={dynamicStyles.sectionTitle}>APPEARANCE</Text>
           </View>
           
-          <View style={dynamicStyles.settingRow}>
-            <View style={dynamicStyles.settingInfo}>
-              <Text style={dynamicStyles.settingLabel}>Speech-to-Text</Text>
-              <Text style={dynamicStyles.settingDescription}>
-                Captura de ideias por voz
-              </Text>
-            </View>
-            <Switch
-              value={settings.enableSpeechToText}
-              onValueChange={handleSpeechToggle}
-              trackColor={{ false: colors.muted, true: colors.primary }}
-              thumbColor={colors.primaryForeground}
-            />
-          </View>
-
-          <View style={dynamicStyles.settingRow}>
-            <View style={dynamicStyles.settingInfo}>
-              <Text style={dynamicStyles.settingLabel}>Tema</Text>
-              <Text style={dynamicStyles.settingDescription}>
-                Aparência do aplicativo
-              </Text>
-            </View>
-            <View style={dynamicStyles.themeContainer}>
-              <TouchableOpacity
-                style={[
-                  dynamicStyles.themeOption,
-                  settings.theme === 'light' && dynamicStyles.themeOptionSelected
-                ]}
-                onPress={() => handleThemeChange('light')}
+          <View style={dynamicStyles.card}>
+            <View style={dynamicStyles.inputContainer}>
+              <Text style={dynamicStyles.label}>Theme</Text>
+              <TouchableOpacity 
+                style={dynamicStyles.selectContainer}
+                onPress={() => {
+                  // Toggle between themes
+                  const themes: ('light' | 'dark' | 'system')[] = ['light', 'dark', 'system'];
+                  const currentIndex = themes.indexOf(settings.theme as any);
+                  const nextTheme = themes[(currentIndex + 1) % themes.length];
+                  handleThemeChange(nextTheme);
+                }}
               >
-                <View style={dynamicStyles.themeOptionContent}>
-                  <Icon {...AppIcons.lightMode} size={16} color={colors.foreground} />
-                  <Text style={dynamicStyles.themeText}>Claro</Text>
+                <View style={dynamicStyles.selectContent}>
+                  <Icon name="computer" library="Material" size={16} color={colors.foreground} />
+                  <Text style={dynamicStyles.selectText}>System</Text>
                 </View>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  dynamicStyles.themeOption,
-                  settings.theme === 'dark' && dynamicStyles.themeOptionSelected
-                ]}
-                onPress={() => handleThemeChange('dark')}
-              >
-                <View style={dynamicStyles.themeOptionContent}>
-                  <Icon {...AppIcons.darkMode} size={16} color={colors.foreground} />
-                  <Text style={dynamicStyles.themeText}>Escuro</Text>
-                </View>
+                <Icon name="keyboard-arrow-down" library="Material" size={20} color={colors.mutedForeground} />
               </TouchableOpacity>
             </View>
           </View>
         </View>
 
-        {/* Informações */}
+        {/* DATA & EXPORT Section */}
         <View style={dynamicStyles.section}>
-          <Text style={dynamicStyles.sectionTitle}>ℹ️ Informações</Text>
-          <View style={dynamicStyles.infoContainer}>
-            <Text style={dynamicStyles.infoText}>IdeaPile v1.0.0</Text>
-            <Text style={dynamicStyles.infoText}>Capture e expanda suas ideias com IA</Text>
-            <Text style={dynamicStyles.infoSubtext}>
-              Desenvolvido com React Native + Expo
-            </Text>
+          <View style={dynamicStyles.sectionHeader}>
+            <Icon name="file-download" library="Material" size={20} color={colors.foreground} />
+            <Text style={dynamicStyles.sectionTitle}>DATA & EXPORT</Text>
           </View>
+          
+          <View style={dynamicStyles.card}>
+            <View style={dynamicStyles.inputContainer}>
+              <Text style={dynamicStyles.label}>Export Options</Text>
+              <View style={dynamicStyles.exportButtonsContainer}>
+                <TouchableOpacity 
+                  style={dynamicStyles.exportButton}
+                  onPress={() => handleExport('json')}
+                >
+                  <Icon name="storage" library="Material" size={20} color={colors.foreground} />
+                  <Text style={dynamicStyles.exportButtonText}>JSON</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={dynamicStyles.exportButton}
+                  onPress={() => handleExport('csv')}
+                >
+                  <Icon name="description" library="Material" size={20} color={colors.foreground} />
+                  <Text style={dynamicStyles.exportButtonText}>CSV</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={dynamicStyles.exportButton}
+                  onPress={() => handleExport('txt')}
+                >
+                  <Icon name="article" library="Material" size={20} color={colors.foreground} />
+                  <Text style={dynamicStyles.exportButtonText}>TXT</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={dynamicStyles.helpText}>
+                Export all your ideas in your preferred format
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Footer */}
+        <View style={dynamicStyles.footer}>
+          <Text style={dynamicStyles.footerText}>IdeaPile v1.0.0</Text>
+          <Text style={dynamicStyles.footerSubtext}>Built with ❤️ for creative minds</Text>
         </View>
 
         <View style={dynamicStyles.bottomSpacing} />
@@ -397,42 +488,20 @@ const createStyles = (colors: any) => StyleSheet.create({
     alignItems: 'center',
     paddingTop: 50,
     paddingBottom: 16,
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: colors.border,
   },
   backButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-  },
-  backText: {
-    fontSize: 16,
-    color: colors.primary,
+    padding: 8,
   },
   title: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: '600',
     color: colors.foreground,
   },
   placeholder: {
-    width: 60,
-  },
-  saveButton: {
-    backgroundColor: colors.primary,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-  },
-  saveButtonDisabled: {
-    backgroundColor: colors.muted,
-  },
-  saveText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.primaryForeground,
-  },
-  saveTextDisabled: {
-    color: colors.mutedForeground,
+    width: 40,
   },
   loadingContainer: {
     flex: 1,
@@ -445,7 +514,7 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
   },
   section: {
     marginVertical: 24,
@@ -453,181 +522,150 @@ const createStyles = (colors: any) => StyleSheet.create({
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.foreground,
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.mutedForeground,
     marginLeft: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  card: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   inputContainer: {
-    marginBottom: 20,
+    marginBottom: 16,
   },
   label: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '500',
     color: colors.foreground,
     marginBottom: 8,
   },
   input: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 8,
+    padding: 12,
     fontSize: 16,
     color: colors.foreground,
     backgroundColor: colors.input,
   },
-  helpButton: {
-    marginTop: 4,
+  passwordContainer: {
+    position: 'relative',
+  },
+  passwordInput: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    padding: 12,
+    paddingRight: 48,
+    fontSize: 16,
+    color: colors.foreground,
+    backgroundColor: colors.input,
+  },
+  eyeButton: {
+    position: 'absolute',
+    right: 12,
+    top: 12,
+    padding: 4,
   },
   helpText: {
-    fontSize: 14,
-    color: colors.primary,
-    textDecorationLine: 'underline',
+    fontSize: 12,
+    color: colors.mutedForeground,
+    marginTop: 4,
   },
-  testButton: {
-    backgroundColor: colors.success,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
+  selectContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    padding: 12,
+    backgroundColor: colors.input,
   },
-  testButtonDisabled: {
-    backgroundColor: colors.muted,
-  },
-  testButtonContent: {
+  selectContent: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  testButtonText: {
+  selectText: {
     fontSize: 16,
-    fontWeight: '600',
-    color: colors.primaryForeground,
+    color: colors.foreground,
     marginLeft: 8,
   },
-  modelContainer: {
+  exportButtonsContainer: {
     flexDirection: 'row',
     gap: 8,
+    marginBottom: 8,
   },
-  modelOption: {
+  exportButton: {
     flex: 1,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 8,
     padding: 12,
     alignItems: 'center',
+    backgroundColor: colors.background,
   },
-  modelOptionSelected: {
-    borderColor: colors.primary,
-    backgroundColor: colors.accent,
+  exportButtonText: {
+    fontSize: 12,
+    color: colors.foreground,
+    marginTop: 4,
+    fontWeight: '500',
   },
-  modelText: {
-    fontSize: 14,
-    color: colors.mutedForeground,
-    textAlign: 'center',
-  },
-  modelTextSelected: {
-    color: colors.primary,
-    fontWeight: '600',
-  },
-  sliderContainer: {
-    flexDirection: 'row',
+  footer: {
     alignItems: 'center',
-    marginVertical: 8,
+    paddingVertical: 32,
   },
-  sliderLabel: {
+  footerText: {
     fontSize: 12,
     color: colors.mutedForeground,
-    minWidth: 70,
   },
-  sliderTrack: {
-    flex: 1,
-    height: 4,
-    backgroundColor: colors.muted,
-    borderRadius: 2,
-    marginHorizontal: 8,
-    position: 'relative',
-  },
-  sliderThumb: {
-    position: 'absolute',
-    width: 20,
-    height: 20,
-    backgroundColor: colors.primary,
-    borderRadius: 10,
-    top: -8,
-  },
-  hint: {
+  footerSubtext: {
     fontSize: 12,
     color: colors.mutedForeground,
     marginTop: 4,
   },
-  settingRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  settingInfo: {
-    flex: 1,
-  },
-  settingLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.foreground,
-    marginBottom: 2,
-  },
-  settingDescription: {
-    fontSize: 14,
-    color: colors.mutedForeground,
-  },
-  themeContainer: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  themeOption: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 6,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-  },
-  themeOptionSelected: {
-    borderColor: colors.primary,
-    backgroundColor: colors.accent,
-  },
-  themeOptionContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  themeText: {
-    fontSize: 14,
-    color: colors.mutedForeground,
-    marginLeft: 8,
-  },
-  infoContainer: {
-    padding: 16,
-    backgroundColor: colors.muted,
-    borderRadius: 8,
-  },
-  infoText: {
-    fontSize: 16,
-    color: colors.foreground,
-    marginBottom: 4,
-  },
-  infoSubtext: {
-    fontSize: 14,
-    color: colors.mutedForeground,
-    marginTop: 8,
-  },
   bottomSpacing: {
     height: 50,
   },
+  saveButton: {
+    padding: 8,
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+  },
+  saveText: {
+    color: colors.background,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  toggleTextContainer: {
+    flex: 1,
+  },
+  toggleSwitch: {
+    width: 50,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  toggleThumb: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+  },
 });
-
-// Estilos estáticos para compatibilidade
-const styles = createStyles(Colors);

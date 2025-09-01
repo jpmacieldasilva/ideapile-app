@@ -12,8 +12,9 @@ const STORAGE_KEYS = {
 const DEFAULT_SETTINGS: AppSettings = {
   openaiModel: 'gpt-3.5-turbo',
   aiTemperature: 0.7,
-  theme: 'light',
+  theme: 'system',
   enableSpeechToText: true,
+  enableAutoTagging: true,
 };
 
 class StorageService {
@@ -211,6 +212,28 @@ class StorageService {
       return userName;
     } catch (error) {
       console.error('❌ Error getting user name:', error);
+      return null;
+    }
+  }
+
+  // Salvar email do usuário
+  async saveUserEmail(userEmail: string): Promise<void> {
+    try {
+      await AsyncStorage.setItem('@ideapile:user_email', userEmail);
+      console.log('📧 User email saved');
+    } catch (error) {
+      console.error('❌ Error saving user email:', error);
+      throw error;
+    }
+  }
+
+  // Buscar email do usuário
+  async getUserEmail(): Promise<string | null> {
+    try {
+      const userEmail = await AsyncStorage.getItem('@ideapile:user_email');
+      return userEmail;
+    } catch (error) {
+      console.error('❌ Error getting user email:', error);
       return null;
     }
   }

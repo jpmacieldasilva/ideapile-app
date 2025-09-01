@@ -40,11 +40,40 @@ class IdeaPileService {
   // Criar nova ideia
   async createIdea(content: string, tags: string[] = []): Promise<Idea> {
     try {
+      let finalTags = tags;
+      
+      // Se não foram fornecidas tags, verificar se a geração automática está habilitada
+      if (tags.length === 0) {
+        const appSettings = await storage.getSettings();
+        
+        if (appSettings.enableAutoTagging) {
+          try {
+            const isConfigured = await aiService.isConfigured();
+            if (isConfigured) {
+              console.log('🤖 Generating tags with AI...');
+              const aiTags = await aiService.generateTags(content);
+              finalTags = aiTags;
+              console.log('✅ AI tags generated:', aiTags);
+            } else {
+              console.log('⚠️ AI not configured, using fallback tags');
+              // Usar tags básicas como fallback
+              finalTags = ['ideia', 'projeto'];
+            }
+          } catch (error) {
+            console.error('❌ Error generating AI tags, using fallback:', error);
+            finalTags = ['ideia', 'projeto'];
+          }
+        } else {
+          console.log('ℹ️ Auto tagging disabled, using default tags');
+          finalTags = ['ideia', 'projeto'];
+        }
+      }
+
       const idea: Idea = {
         id: generateId(),
         content: content.trim(),
         timestamp: new Date(),
-        tags,
+        tags: finalTags,
         isFavorite: false,
         connections: [],
         aiExpansions: [],

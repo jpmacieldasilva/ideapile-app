@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, ViewStyle, TextStyle } from 'react-native';
 import { useThemeColors } from '../../hooks/useThemeColors';
 
-interface BadgeProps {
+export interface BadgeProps {
   children: React.ReactNode;
   variant?: 'default' | 'secondary' | 'outline';
   style?: ViewStyle;
