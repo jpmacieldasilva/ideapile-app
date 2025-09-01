@@ -16,10 +16,13 @@ import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { ideaPileService, speechService, storage } from '../src/services';
 import { Colors, TextStyles, Spacing, BorderRadius, Shadows, AnimationDurations, createFadeAnimation, createScaleAnimation } from '../src/constants';
+import { Icon, AppIcons } from '../src/components/ui';
+import { useThemeColors } from '../src/hooks';
 
 const { width, height } = Dimensions.get('window');
 
 export default function CaptureScreen() {
+  const colors = useThemeColors();
   const [content, setContent] = useState('');
   const [tags, setTags] = useState('');
   const [saving, setSaving] = useState(false);
@@ -112,7 +115,7 @@ export default function CaptureScreen() {
           setContent(newContent);
           setIsListening(false);
           
-          Alert.alert('Sucesso!', 'Texto capturado por voz! 🎤');
+          Alert.alert('Sucesso!', 'Texto capturado por voz!');
         },
         (error) => {
           setIsListening(false);
@@ -176,39 +179,41 @@ export default function CaptureScreen() {
     }
   };
 
+  const dynamicStyles = createStyles(colors);
+  
   if (showTextInput) {
     return (
       <KeyboardAvoidingView 
-        style={styles.container}
+        style={dynamicStyles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <StatusBar style="light" />
         
         {/* Header para modo texto */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => setShowTextInput(false)} style={styles.backButton}>
-            <Text style={styles.backText}>← Voltar</Text>
+        <View style={dynamicStyles.header}>
+          <TouchableOpacity onPress={() => setShowTextInput(false)} style={dynamicStyles.backButton}>
+            <Text style={dynamicStyles.backText}>← Voltar</Text>
           </TouchableOpacity>
           
-          <Text style={styles.headerTitle}>Escrever Ideia</Text>
+          <Text style={dynamicStyles.headerTitle}>Escrever Ideia</Text>
           
           <TouchableOpacity 
             onPress={handleSave} 
-            style={[styles.saveButton, (!content.trim() || saving) && styles.saveButtonDisabled]}
+            style={[dynamicStyles.saveButton, (!content.trim() || saving) && dynamicStyles.saveButtonDisabled]}
             disabled={!content.trim() || saving}
           >
-            <Text style={[styles.saveText, (!content.trim() || saving) && styles.saveTextDisabled]}>
+            <Text style={[dynamicStyles.saveText, (!content.trim() || saving) && dynamicStyles.saveTextDisabled]}>
               {saving ? 'Salvando...' : 'Salvar'}
             </Text>
           </TouchableOpacity>
         </View>
 
-        <ScrollView style={styles.textContent} showsVerticalScrollIndicator={false}>
-          <View style={styles.textInputContainer}>
+        <ScrollView style={dynamicStyles.textContent} showsVerticalScrollIndicator={false}>
+          <View style={dynamicStyles.textInputContainer}>
             <TextInput
-              style={styles.textInput}
+              style={dynamicStyles.textInput}
               placeholder="Digite sua ideia aqui..."
-              placeholderTextColor={Colors.mutedForeground}
+              placeholderTextColor={colors.mutedForeground}
               value={content}
               onChangeText={setContent}
               multiline
@@ -217,12 +222,12 @@ export default function CaptureScreen() {
             />
           </View>
 
-          <View style={styles.tagsContainer}>
-            <Text style={styles.tagsLabel}>Tags (opcional)</Text>
+          <View style={dynamicStyles.tagsContainer}>
+            <Text style={dynamicStyles.tagsLabel}>Tags (opcional)</Text>
             <TextInput
-              style={styles.tagsInput}
+              style={dynamicStyles.tagsInput}
               placeholder="Ex: trabalho, pessoal, projeto"
-              placeholderTextColor={Colors.mutedForeground}
+              placeholderTextColor={colors.mutedForeground}
               value={tags}
               onChangeText={setTags}
             />
@@ -233,47 +238,47 @@ export default function CaptureScreen() {
   }
 
   return (
-    <Animated.View style={[styles.container, { opacity: fadeInAnim }]}>
+    <Animated.View style={[dynamicStyles.container, { opacity: fadeInAnim }]}>
       <StatusBar style="light" />
       
       {/* Header minimalista */}
-      <View style={styles.voiceHeader}>
-        <TouchableOpacity onPress={handleCancel} style={styles.closeButton}>
-          <Text style={styles.closeIcon}>✕</Text>
+      <View style={dynamicStyles.voiceHeader}>
+        <TouchableOpacity onPress={handleCancel} style={dynamicStyles.closeButton}>
+          <Icon {...AppIcons.close} size={24} color={colors.foreground} />
         </TouchableOpacity>
       </View>
 
       {/* Interface principal de voz */}
-      <View style={styles.voiceContainer}>
+      <View style={dynamicStyles.voiceContainer}>
         {/* Título e instruções */}
-        <View style={styles.titleSection}>
-          <Text style={styles.mainTitle}>
+        <View style={dynamicStyles.titleSection}>
+          <Text style={dynamicStyles.mainTitle}>
             {isListening ? 'Escutando...' : 'Grave sua ideia'}
           </Text>
-          <Text style={styles.subtitle}>
+          <Text style={dynamicStyles.subtitle}>
             {isListening ? 'Fale agora e eu vou capturar!' : 'Toque no microfone para começar'}
           </Text>
         </View>
 
         {/* Preview do texto capturado */}
         {content.length > 0 && (
-          <View style={styles.textPreview}>
-            <Text style={styles.previewText} numberOfLines={6}>
+          <View style={dynamicStyles.textPreview}>
+            <Text style={dynamicStyles.previewText} numberOfLines={6}>
               {content}
             </Text>
           </View>
         )}
 
         {/* Microfone central com animações */}
-        <View style={styles.microphoneSection}>
+        <View style={dynamicStyles.microphoneSection}>
           {/* Ondas de áudio animadas */}
           {isListening && (
-            <View style={styles.audioWaves}>
+            <View style={dynamicStyles.audioWaves}>
               {[...Array(3)].map((_, i) => (
                 <Animated.View
                   key={i}
                   style={[
-                    styles.wave,
+                    dynamicStyles.wave,
                     {
                       opacity: waveAnim,
                       transform: [
@@ -292,49 +297,62 @@ export default function CaptureScreen() {
           )}
           
           {/* Botão do microfone */}
-          <Animated.View style={[styles.micButton, { transform: [{ scale: pulseAnim }] }]}>
+          <Animated.View style={[dynamicStyles.micButton, { transform: [{ scale: pulseAnim }] }]}>
             <TouchableOpacity
               onPress={isListening ? handleStopListening : handleStartListening}
-              style={[styles.micTouchable, isListening && styles.micActive]}
+              style={[dynamicStyles.micTouchable, isListening && dynamicStyles.micActive]}
               disabled={saving}
             >
-              <Text style={styles.micIcon}>🎤</Text>
+              <Icon {...AppIcons.mic} size={48} color={colors.fabForeground} />
             </TouchableOpacity>
           </Animated.View>
         </View>
 
         {/* Status e ações */}
-        <View style={styles.actionsSection}>
+        <View style={dynamicStyles.actionsSection}>
           {isListening && (
-            <Text style={styles.listeningStatus}>Toque novamente para parar</Text>
+            <Text style={dynamicStyles.listeningStatus}>Toque novamente para parar</Text>
           )}
           
           {!isListening && content.length === 0 && (
             <TouchableOpacity 
               onPress={() => setShowTextInput(true)} 
-              style={styles.textOption}
+              style={dynamicStyles.textOption}
             >
-              <Text style={styles.textOptionText}>✏️ Prefere escrever?</Text>
+              <View style={dynamicStyles.textOptionContent}>
+                <Icon {...AppIcons.edit} size={16} color={colors.mutedForeground} />
+                <Text style={dynamicStyles.textOptionText}>Prefere escrever?</Text>
+              </View>
             </TouchableOpacity>
           )}
 
           {content.length > 0 && !isListening && (
-            <View style={styles.actionButtons}>
+            <View style={dynamicStyles.actionButtons}>
               <TouchableOpacity 
                 onPress={() => setContent('')} 
-                style={styles.clearButton}
+                style={dynamicStyles.clearButton}
               >
-                <Text style={styles.clearText}>🗑️ Limpar</Text>
+                <View style={dynamicStyles.clearContent}>
+                  <Icon {...AppIcons.clear} size={16} color={colors.destructive} />
+                  <Text style={dynamicStyles.clearText}>Limpar</Text>
+                </View>
               </TouchableOpacity>
               
               <TouchableOpacity 
                 onPress={handleSave} 
-                style={[styles.saveMainButton, saving && styles.saveMainButtonDisabled]}
+                style={[dynamicStyles.saveMainButton, saving && dynamicStyles.saveMainButtonDisabled]}
                 disabled={saving}
               >
-                <Text style={[styles.saveMainText, saving && styles.saveMainTextDisabled]}>
-                  {saving ? 'Salvando...' : '💾 Salvar Ideia'}
-                </Text>
+                <View style={dynamicStyles.saveContent}>
+                  {saving ? (
+                    <Text style={[dynamicStyles.saveMainText, dynamicStyles.saveMainTextDisabled]}>Salvando...</Text>
+                  ) : (
+                    <>
+                      <Icon {...AppIcons.save} size={16} color={colors.fabForeground} />
+                      <Text style={dynamicStyles.saveMainText}>Salvar Ideia</Text>
+                    </>
+                  )}
+                </View>
               </TouchableOpacity>
             </View>
           )}
@@ -344,7 +362,7 @@ export default function CaptureScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   // Container principal
   container: {
     flex: 1,
@@ -392,10 +410,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  closeIcon: {
-    fontSize: 18,
-    color: Colors.foreground,
-  },
+
 
   // === Interface de Voz ===
   voiceContainer: {
@@ -478,9 +493,7 @@ const styles = StyleSheet.create({
   micActive: {
     backgroundColor: Colors.error,
   },
-  micIcon: {
-    fontSize: 48,
-  },
+
 
   // Seção de ações
   actionsSection: {
@@ -496,10 +509,15 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.lg,
   },
+  textOptionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   textOptionText: {
     ...TextStyles.body,
     color: Colors.mutedForeground,
     textAlign: 'center',
+    marginLeft: Spacing.xs,
   },
   
   // Botões de ação quando há conteúdo
@@ -515,9 +533,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     borderRadius: BorderRadius.lg,
   },
+  clearContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   clearText: {
     ...TextStyles.button,
-    color: Colors.mutedForeground,
+    color: Colors.destructive,
+    marginLeft: Spacing.xs,
   },
   saveMainButton: {
     backgroundColor: Colors.primary,
@@ -529,9 +552,14 @@ const styles = StyleSheet.create({
   saveMainButtonDisabled: {
     backgroundColor: Colors.muted,
   },
+  saveContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   saveMainText: {
     ...TextStyles.button,
     color: Colors.primaryForeground,
+    marginLeft: Spacing.xs,
   },
   saveMainTextDisabled: {
     color: Colors.mutedForeground,
@@ -593,3 +621,6 @@ const styles = StyleSheet.create({
     color: Colors.mutedForeground,
   },
 });
+
+// Estilos estáticos para compatibilidade
+const styles = createStyles(Colors);

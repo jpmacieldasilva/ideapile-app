@@ -1,4 +1,4 @@
-// Cores baseadas na referência Pile - tema escuro elegante
+// Cores baseadas na referência Pile - tema escuro elegante (padrão para compatibilidade)
 export const Colors = {
   // Cores principais - Dark Theme
   background: '#0a0a0a',       // Fundo principal escuro
@@ -34,6 +34,7 @@ export const Colors = {
   success: '#22c55e',
   warning: '#f59e0b',
   error: '#ef4444',
+  destructive: '#ef4444',
   
   // Tons específicos do app inspirados na referência
   timeline: '#171717',         // Fundo da timeline

@@ -207,6 +207,71 @@ Seja inspirador e inovador na sua resposta.
     }
   }
 
+  // Encontrar conexões entre ideias
+  async findConnections(idea: Idea, allIdeas: Idea[]): Promise<string[]> {
+    await this.initOpenAI();
+
+    try {
+      const otherIdeas = allIdeas.filter(i => i.id !== idea.id);
+      if (otherIdeas.length === 0) {
+        return [];
+      }
+
+      const ideasText = otherIdeas.map((otherIdea, index) => 
+        `${index + 1}. "${otherIdea.content}" (Tags: ${otherIdea.tags.join(', ')})`
+      ).join('\n');
+
+      const prompt = `
+Você é um assistente que encontra conexões entre ideias.
+
+Ideia base: "${idea.content}"
+Tags da ideia base: ${idea.tags.join(', ')}
+
+Outras ideias disponíveis:
+${ideasText}
+
+Analise e identifique quais ideias têm conexões significativas com a ideia base. Considere:
+- Temas similares
+- Conceitos relacionados
+- Possibilidades de combinação
+- Aplicações complementares
+
+Responda apenas com os números das ideias conectadas, separados por vírgula (ex: "1, 3, 5"). Se não encontrar conexões significativas, responda "nenhuma".
+      `.trim();
+
+      const response = await this.openai!.chat.completions.create({
+        model: AI_CONFIG.model,
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 100,
+        temperature: 0.3, // Menor temperatura para análise mais precisa
+      });
+
+      const content = response.choices[0]?.message?.content?.trim();
+      if (!content || content.toLowerCase().includes('nenhuma')) {
+        return [];
+      }
+
+      // Extrair números das ideias conectadas
+      const numbers = content.match(/\d+/g);
+      if (!numbers) {
+        return [];
+      }
+
+      const connectedIds = numbers
+        .map(num => parseInt(num) - 1) // Converter para índice baseado em 0
+        .filter(index => index >= 0 && index < otherIdeas.length)
+        .map(index => otherIdeas[index].id);
+
+      console.log('🔗 Connections found successfully');
+      return connectedIds;
+    } catch (error) {
+      console.error('❌ Error finding connections:', error);
+      // Fallback: retornar algumas ideias aleatórias
+      const otherIdeas = allIdeas.filter(i => i.id !== idea.id);
+      return otherIdeas.slice(0, Math.min(2, otherIdeas.length)).map(i => i.id);
+    }
+  }
+
   // Verificar se a API key está configurada
   async isConfigured(): Promise<boolean> {
     try {

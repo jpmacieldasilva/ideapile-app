@@ -119,6 +119,24 @@ export function useIdeas() {
     initializeApp();
   }, [loadIdeas]);
 
+  // Criar ideias de exemplo se não houver nenhuma
+  useEffect(() => {
+    if (!loading && ideas.length === 0) {
+      const createSampleIdeas = async () => {
+        try {
+          console.log('Creating sample ideas...');
+          await addIdea('Ideia para um app de produtividade com foco em design minimalista e funcionalidades inteligentes', ['produtividade', 'design', 'app']);
+          await addIdea('Conceito de uma cidade sustentável com energia renovável e transporte público eficiente', ['sustentabilidade', 'urbanismo', 'tecnologia']);
+          await addIdea('Sistema de acompanhamento de reuniões com transcrição automática e geração de resumos com IA', ['reuniões', 'IA', 'produtividade']);
+        } catch (err) {
+          console.error('Error creating sample ideas:', err);
+        }
+      };
+      
+      createSampleIdeas();
+    }
+  }, [loading, ideas.length, addIdea]);
+
   return {
     ideas,
     loading,

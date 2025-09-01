@@ -193,6 +193,48 @@ class StorageService {
     }
   }
 
+  // Salvar nome do usuário
+  async saveUserName(userName: string): Promise<void> {
+    try {
+      await AsyncStorage.setItem('@ideapile:user_name', userName);
+      console.log('👤 User name saved');
+    } catch (error) {
+      console.error('❌ Error saving user name:', error);
+      throw error;
+    }
+  }
+
+  // Buscar nome do usuário
+  async getUserName(): Promise<string | null> {
+    try {
+      const userName = await AsyncStorage.getItem('@ideapile:user_name');
+      return userName;
+    } catch (error) {
+      console.error('❌ Error getting user name:', error);
+      return null;
+    }
+  }
+
+  // Método genérico para buscar item
+  async getItem(key: string): Promise<string | null> {
+    try {
+      return await AsyncStorage.getItem(key);
+    } catch (error) {
+      console.error(`❌ Error getting item ${key}:`, error);
+      return null;
+    }
+  }
+
+  // Método genérico para salvar item
+  async setItem(key: string, value: string): Promise<void> {
+    try {
+      await AsyncStorage.setItem(key, value);
+    } catch (error) {
+      console.error(`❌ Error setting item ${key}:`, error);
+      throw error;
+    }
+  }
+
   // Função helper para criar hash simples
   private hashString(str: string): string {
     let hash = 0;
